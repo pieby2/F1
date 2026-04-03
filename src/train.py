@@ -7,7 +7,6 @@ Usage:
 """
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import lightgbm as lgb
@@ -18,7 +17,7 @@ import pandas as pd
 from sklearn.metrics import mean_absolute_error
 
 from src.features import load_feature_snapshot
-from src.utils import configure_logging, load_config, get_mlflow_tracking_uri
+from src.utils import configure_logging, load_config, get_mlflow_tracking_uri, ensure_dirs, project_root
 
 from loguru import logger
 
@@ -127,7 +126,8 @@ def train(feature_df: pd.DataFrame | None = None) -> str:
         fi = pd.DataFrame(
             {"feature": FEATURE_COLS, "importance": model.feature_importances_}
         ).sort_values("importance", ascending=False)
-        fi_path = Path("/tmp/feature_importance.csv")
+        fi_path = project_root() / "reports" / "feature_importance.csv"
+        ensure_dirs(fi_path.parent)
         fi.to_csv(fi_path, index=False)
         mlflow.log_artifact(str(fi_path), "feature_importance")
 

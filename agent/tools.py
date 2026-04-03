@@ -171,7 +171,8 @@ def retrain_pipeline(seasons: list[int] | None = None) -> dict[str, Any]:
     except subprocess.TimeoutExpired:
         return {"status": "timeout", "output": "Pipeline exceeded 600s timeout."}
     except Exception as exc:
-        return {"status": "error", "output": str(exc)}
+        logger.error(f"retrain_pipeline error: {exc}")
+        return {"status": "error", "output": "Pipeline failed to start. Check server logs for details."}
 
 
 # ── Tool: health_check ────────────────────────────────────────────────────────
