@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>F1 Race Prediction</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #0f0f0f;
+      color: #e5e5e5;
+      min-height: 100vh;
+    }
+    header {
+      background: #e10600;
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    header h1 { font-size: 1.5rem; font-weight: 700; color: #fff; letter-spacing: 1px; }
+    header span { font-size: 0.85rem; color: #ffd700; background: #111; padding: 0.2rem 0.6rem; border-radius: 4px; }
+    main { max-width: 960px; margin: 2rem auto; padding: 0 1rem; }
+    section { background: #1a1a1a; border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
+    h2 { font-size: 1.1rem; color: #e10600; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 1px; }
+    label { display: block; margin-bottom: 0.25rem; font-size: 0.85rem; color: #aaa; }
+    input, select, textarea {
+      width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #333;
+      background: #111; color: #e5e5e5; border-radius: 4px;
+      font-size: 0.9rem; margin-bottom: 0.75rem;
+    }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: #e10600; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; }
+    button {
+      background: #e10600; color: #fff; border: none; padding: 0.6rem 1.5rem;
+      border-radius: 4px; cursor: pointer; font-size: 0.95rem; font-weight: 600;
+      transition: background 0.2s;
+    }
+    button:hover { background: #b80500; }
+    button:disabled { background: #555; cursor: not-allowed; }
+    #preview-text {
+      background: #111; border-left: 3px solid #e10600;
+      padding: 1rem; border-radius: 4px; margin-bottom: 1rem;
+      font-style: italic; color: #ddd; white-space: pre-wrap;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 0.5rem; }
+    th { background: #e10600; color: #fff; padding: 0.5rem 0.75rem; text-align: left; }
+    td { padding: 0.5rem 0.75rem; border-bottom: 1px solid #222; }
+    tr:nth-child(even) td { background: #151515; }
+    .badge {
+      display: inline-block; padding: 0.15rem 0.5rem; border-radius: 12px;
+      font-size: 0.75rem; font-weight: 700;
+    }
+    .badge-gold { background: #ffd700; color: #111; }
+    .badge-silver { background: #c0c0c0; color: #111; }
+    .badge-bronze { background: #cd7f32; color: #111; }
+    .badge-other { background: #333; color: #ccc; }
+    .prob-bar-bg { background: #222; border-radius: 4px; height: 8px; width: 100%; margin-top: 2px; }
+    .prob-bar { background: #e10600; height: 8px; border-radius: 4px; }
+    #agent-response {
+      background: #111; padding: 1rem; border-radius: 4px;
+      font-size: 0.9rem; white-space: pre-wrap; min-height: 60px;
+    }
+    .spinner { display: none; margin-left: 0.5rem; font-size: 0.85rem; color: #aaa; }
+    .error { color: #ff6b6b; font-size: 0.85rem; margin-top: 0.5rem; }
+    .driver-row { display: grid; grid-template-columns: 2fr 2fr 1fr 1fr; gap: 0.5rem; margin-bottom: 0.4rem; }
+    .driver-row input { margin-bottom: 0; }
+    #add-driver-btn { background: #333; margin-top: 0.5rem; font-size: 0.8rem; padding: 0.4rem 1rem; }
+    #add-driver-btn:hover { background: #444; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🏁 F1 Race Prediction</h1>
+  <span>Prototype • MLOps + Agentic AI</span>
+</header>
+
+<main>
+
+  <!-- ── Race Preview Form ────────────────────────────────────────────────── -->
+  <section>
+    <h2>Race Preview &amp; Prediction</h2>
+    <div class="grid-3">
+      <div>
+        <label>Circuit ID</label>
+        <input id="circuit_id" type="text" value="monza" placeholder="e.g. monza, monaco" />
+      </div>
+      <div>
+        <label>Season</label>
+        <input id="season" type="number" value="2025" min="1950" max="2100" />
+      </div>
+      <div>
+        <label>Round</label>
+        <input id="round" type="number" value="14" min="1" max="30" />
+      </div>
+    </div>
+    <div class="grid-2">
+      <div>
+        <label>Race Name (optional)</label>
+        <input id="race_name" type="text" placeholder="Italian Grand Prix" />
+      </div>
+      <div>
+        <label>Conditions</label>
+        <select id="is_wet">
+          <option value="0">Dry</option>
+          <option value="1">Wet</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Driver list -->
+    <label style="margin-top:0.5rem;">Drivers (driver_id | constructor_id | grid | qualy pos)</label>
+    <div id="driver-list"></div>
+    <button id="add-driver-btn" onclick="addDriverRow()">+ Add Driver</button>
+
+    <br/><br/>
+    <button id="preview-btn" onclick="submitPreview()">Generate Preview</button>
+    <span id="preview-spinner" class="spinner">⏳ Generating…</span>
+    <div id="preview-error" class="error"></div>
+  </section>
+
+  <!-- ── Preview Output ──────────────────────────────────────────────────── -->
+  <section id="results-section" style="display:none;">
+    <h2>Race Preview</h2>
+    <div id="preview-text"></div>
+    <h2>Predicted Finishing Order</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Pos</th><th>Driver</th><th>Team</th>
+          <th>Podium %</th><th>Top-10 %</th>
+        </tr>
+      </thead>
+      <tbody id="results-body"></tbody>
+    </table>
+  </section>
+
+  <!-- ── Explain ─────────────────────────────────────────────────────────── -->
+  <section>
+    <h2>Explain a Prediction</h2>
+    <div class="grid-3">
+      <div>
+        <label>Driver ID</label>
+        <input id="exp-driver" type="text" placeholder="verstappen" />
+      </div>
+      <div>
+        <label>Constructor ID</label>
+        <input id="exp-constructor" type="text" placeholder="red_bull" />
+      </div>
+      <div>
+        <label>Grid / Qualy Pos</label>
+        <input id="exp-grid" type="number" value="1" min="1" max="20" />
+      </div>
+    </div>
+    <button onclick="submitExplain()">Explain</button>
+    <div id="explain-error" class="error"></div>
+    <pre id="explain-output" style="margin-top:0.75rem;background:#111;padding:1rem;border-radius:4px;font-size:0.8rem;white-space:pre-wrap;display:none;"></pre>
+  </section>
+
+  <!-- ── Agent ───────────────────────────────────────────────────────────── -->
+  <section>
+    <h2>Ask the Agent</h2>
+    <textarea id="agent-query" rows="2" placeholder="e.g. Who will win the Monza Grand Prix this year?"></textarea>
+    <button onclick="submitAgent()">Ask</button>
+    <span id="agent-spinner" class="spinner">⏳ Thinking…</span>
+    <div id="agent-response"></div>
+  </section>
+
+</main>
+
+<script>
+  // ── Default drivers ──────────────────────────────────────────────────────
+  const DEFAULT_DRIVERS = [
+    { driver_id: "verstappen",  constructor_id: "red_bull",  grid: 1,  qualifying_position: 1  },
+    { driver_id: "norris",      constructor_id: "mclaren",   grid: 2,  qualifying_position: 2  },
+    { driver_id: "leclerc",     constructor_id: "ferrari",   grid: 3,  qualifying_position: 3  },
+    { driver_id: "piastri",     constructor_id: "mclaren",   grid: 4,  qualifying_position: 4  },
+    { driver_id: "sainz",       constructor_id: "ferrari",   grid: 5,  qualifying_position: 5  },
+    { driver_id: "hamilton",    constructor_id: "mercedes",  grid: 6,  qualifying_position: 6  },
+    { driver_id: "russell",     constructor_id: "mercedes",  grid: 7,  qualifying_position: 7  },
+    { driver_id: "perez",       constructor_id: "red_bull",  grid: 8,  qualifying_position: 8  },
+    { driver_id: "alonso",      constructor_id: "aston_martin", grid: 9, qualifying_position: 9 },
+    { driver_id: "stroll",      constructor_id: "aston_martin", grid: 10, qualifying_position: 10 },
+  ];
+
+  function addDriverRow(d = {}) {
+    const list = document.getElementById("driver-list");
+    const div = document.createElement("div");
+    div.className = "driver-row";
+    div.innerHTML = `
+      <input type="text"   placeholder="driver_id"     value="${d.driver_id || ''}" />
+      <input type="text"   placeholder="constructor_id" value="${d.constructor_id || ''}" />
+      <input type="number" placeholder="grid"   min="1" max="20" value="${d.grid || ''}" />
+      <input type="number" placeholder="qualy"  min="1" max="20" value="${d.qualifying_position || ''}" />
+    `;
+    list.appendChild(div);
+  }
+
+  function getDrivers() {
+    const rows = document.querySelectorAll("#driver-list .driver-row");
+    const drivers = [];
+    rows.forEach(row => {
+      const inputs = row.querySelectorAll("input");
+      const d = {
+        driver_id: inputs[0].value.trim(),
+        constructor_id: inputs[1].value.trim(),
+        grid: parseInt(inputs[2].value) || 10,
+        qualifying_position: parseInt(inputs[3].value) || 10,
+      };
+      if (d.driver_id && d.constructor_id) drivers.push(d);
+    });
+    return drivers;
+  }
+
+  function positionBadge(pos) {
+    if (pos === 1) return `<span class="badge badge-gold">P1</span>`;
+    if (pos === 2) return `<span class="badge badge-silver">P2</span>`;
+    if (pos === 3) return `<span class="badge badge-bronze">P3</span>`;
+    return `<span class="badge badge-other">P${pos}</span>`;
+  }
+
+  function probBar(val) {
+    const pct = Math.round(val * 100);
+    return `<div>${pct}%<div class="prob-bar-bg"><div class="prob-bar" style="width:${pct}%"></div></div></div>`;
+  }
+
+  async function submitPreview() {
+    const btn = document.getElementById("preview-btn");
+    const spinner = document.getElementById("preview-spinner");
+    const errDiv = document.getElementById("preview-error");
+    errDiv.textContent = "";
+    btn.disabled = true;
+    spinner.style.display = "inline";
+
+    const drivers = getDrivers();
+    if (!drivers.length) {
+      errDiv.textContent = "Please add at least one driver.";
+      btn.disabled = false; spinner.style.display = "none";
+      return;
+    }
+
+    const payload = {
+      circuit_id: document.getElementById("circuit_id").value.trim(),
+      season: parseInt(document.getElementById("season").value),
+      round: parseInt(document.getElementById("round").value),
+      race_name: document.getElementById("race_name").value.trim(),
+      is_wet: parseInt(document.getElementById("is_wet").value),
+      drivers,
+    };
+
+    try {
+      const resp = await fetch("/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err.detail || resp.statusText);
+      }
+      const data = await resp.json();
+
+      document.getElementById("preview-text").textContent = data.preview_text;
+
+      const tbody = document.getElementById("results-body");
+      tbody.innerHTML = "";
+      data.predictions.forEach(p => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${positionBadge(p.predicted_position)}</td>
+          <td>${p.driver_id}</td>
+          <td>${p.constructor_id}</td>
+          <td>${probBar(p.podium_prob)}</td>
+          <td>${probBar(p.top10_prob)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      document.getElementById("results-section").style.display = "block";
+    } catch (e) {
+      errDiv.textContent = "Error: " + e.message;
+    } finally {
+      btn.disabled = false;
+      spinner.style.display = "none";
+    }
+  }
+
+  async function submitExplain() {
+    const errDiv = document.getElementById("explain-error");
+    const out = document.getElementById("explain-output");
+    errDiv.textContent = "";
+    out.style.display = "none";
+
+    const payload = {
+      driver_id: document.getElementById("exp-driver").value.trim(),
+      constructor_id: document.getElementById("exp-constructor").value.trim(),
+      grid: parseInt(document.getElementById("exp-grid").value) || 1,
+      qualifying_position: parseInt(document.getElementById("exp-grid").value) || 1,
+      circuit_id: document.getElementById("circuit_id").value.trim() || "monza",
+      season: parseInt(document.getElementById("season").value) || 2025,
+      round: parseInt(document.getElementById("round").value) || 1,
+    };
+
+    if (!payload.driver_id || !payload.constructor_id) {
+      errDiv.textContent = "Please enter driver_id and constructor_id.";
+      return;
+    }
+
+    try {
+      const resp = await fetch("/explain", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err.detail || resp.statusText);
+      }
+      const data = await resp.json();
+      out.textContent = JSON.stringify(data, null, 2);
+      out.style.display = "block";
+    } catch (e) {
+      errDiv.textContent = "Error: " + e.message;
+    }
+  }
+
+  async function submitAgent() {
+    const spinner = document.getElementById("agent-spinner");
+    const out = document.getElementById("agent-response");
+    spinner.style.display = "inline";
+    out.textContent = "";
+
+    const query = document.getElementById("agent-query").value.trim();
+    if (!query) { spinner.style.display = "none"; return; }
+
+    const circuit_id = document.getElementById("circuit_id").value.trim();
+    const season = parseInt(document.getElementById("season").value) || 2025;
+    const round = parseInt(document.getElementById("round").value) || 1;
+    const drivers = getDrivers();
+
+    const payload = {
+      query,
+      context: { circuit_id, season, round, drivers: drivers.length ? drivers : undefined },
+    };
+
+    try {
+      const resp = await fetch("/agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await resp.json();
+      out.textContent = data.response || JSON.stringify(data);
+    } catch (e) {
+      out.textContent = "Error: " + e.message;
+    } finally {
+      spinner.style.display = "none";
+    }
+  }
+
+  // Initialise with default drivers
+  window.onload = () => DEFAULT_DRIVERS.forEach(d => addDriverRow(d));
+</script>
+</body>
+</html>
