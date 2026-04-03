@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from loguru import logger
 from pydantic import BaseModel
 
@@ -32,5 +32,9 @@ def agent_query(req: AgentRequest) -> dict[str, Any]:
       - "Retrain the model with 2024 data."
     """
     logger.info(f"Agent query: {req.query!r}")
-    response = ask_agent(req.query, req.context)
+    try:
+        response = ask_agent(req.query, req.context)
+    except Exception as exc:
+        logger.exception("Agent query failed")
+        raise HTTPException(status_code=500, detail="Agent encountered an error.") from exc
     return {"query": req.query, "response": response}
