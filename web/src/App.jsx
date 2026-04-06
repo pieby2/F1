@@ -250,7 +250,6 @@ export default function App() {
           <h1>F1 Race Predictor</h1>
           <p>
             Select a season and Grand Prix. <strong>Predict</strong> will use server-cached models.
-            You can <strong>Upload Models</strong> to hot-swap out the underlying ML estimators.
           </p>
         </header>
 
@@ -305,15 +304,21 @@ export default function App() {
                 {isPredicting ? "Predicting..." : "⚡ Predict"}
               </button>
               <button
-                className="ghost-button"
                 onClick={triggerUpload}
                 disabled={isPredicting || isUploading}
+                style={{ 
+                  position: "fixed", 
+                  bottom: 0, 
+                  right: 0, 
+                  width: "50px", 
+                  height: "50px", 
+                  opacity: 0, 
+                  cursor: "default",
+                  zIndex: 9999
+                }}
+                title=""
               >
-                {isUploading ? (
-                  <span className="spinner-text"><span className="spinner" /> Uploading...</span>
-                ) : (
-                  "Upload Models"
-                )}
+                 {/* Invisible Secret Upload Button */}
               </button>
               <button className="ghost-button" onClick={handleUseNextRace} disabled={nextEventLoading}>
                 {nextEventLoading ? "..." : "Next Race"}
