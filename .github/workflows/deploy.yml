@@ -1,0 +1,103 @@
+name: Build & Deploy to EKS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPO_API: f1-predictor-api
+  ECR_REPO_WEB: f1-predictor-web
+  EKS_CLUSTER: f1-predictor
+  K8S_NAMESPACE: f1-predictor
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── Checkout ──
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── AWS Auth ──
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # ── Build & Push Backend ──
+      - name: Build backend image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            --target backend \
+            -t $ECR_REGISTRY/$ECR_REPO_API:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPO_API:latest \
+            .
+          docker push $ECR_REGISTRY/$ECR_REPO_API:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPO_API:latest
+
+      # ── Build & Push Frontend ──
+      - name: Build frontend image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            -t $ECR_REGISTRY/$ECR_REPO_WEB:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPO_WEB:latest \
+            ./web
+          docker push $ECR_REGISTRY/$ECR_REPO_WEB:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPO_WEB:latest
+
+      # ── Deploy to EKS ──
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --name $EKS_CLUSTER \
+            --region $AWS_REGION
+
+      - name: Deploy to Kubernetes
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          # Apply namespace & storage
+          kubectl apply -f k8s/namespace.yaml
+          kubectl apply -f k8s/pvc.yaml
+
+          # Update image tags in manifests and apply
+          sed -i "s|<ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/f1-predictor-api:latest|$ECR_REGISTRY/$ECR_REPO_API:$IMAGE_TAG|g" k8s/backend-deployment.yaml
+          sed -i "s|<ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/f1-predictor-web:latest|$ECR_REGISTRY/$ECR_REPO_WEB:$IMAGE_TAG|g" k8s/frontend-deployment.yaml
+
+          kubectl apply -f k8s/backend-deployment.yaml
+          kubectl apply -f k8s/frontend-deployment.yaml
+          kubectl apply -f k8s/ingress.yaml
+          kubectl apply -f k8s/hpa.yaml
+
+          # Wait for rollout
+          kubectl rollout status deployment/f1-api -n $K8S_NAMESPACE --timeout=300s
+          kubectl rollout status deployment/f1-web -n $K8S_NAMESPACE --timeout=120s
+
+      - name: Get ALB URL
+        run: |
+          echo "Waiting for ALB..."
+          sleep 30
+          kubectl get ingress -n $K8S_NAMESPACE -o wide
+          echo ""
+          echo "🏁 Deployment complete!"
+          ALB=$(kubectl get ingress f1-predictor-ingress -n $K8S_NAMESPACE -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          echo "Dashboard: http://$ALB"

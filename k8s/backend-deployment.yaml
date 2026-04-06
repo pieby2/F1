@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: f1-api
+  namespace: f1-predictor
+  labels:
+    app.kubernetes.io/name: f1-predictor
+    app.kubernetes.io/component: backend
+spec:
+  replicas: 1   # Single replica — sklearn retraining is memory-intensive
+  selector:
+    matchLabels:
+      app: f1-api
+  template:
+    metadata:
+      labels:
+        app: f1-api
+        app.kubernetes.io/name: f1-predictor
+        app.kubernetes.io/component: backend
+    spec:
+      containers:
+        - name: f1-api
+          # Replace <ACCOUNT_ID> and <REGION> with your AWS values
+          image: <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/f1-predictor-api:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          env:
+            - name: DATA_ROOT
+              value: "/app/data/fastf1_csv"
+            - name: MODELS_ROOT
+              value: "/app/models"
+            - name: PREWARM_INFERENCE
+              value: "1"
+            - name: ALLOW_ORIGINS
+              value: "*"
+            - name: INFERENCE_ENABLE_DATASET_CACHE
+              value: "1"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "2Gi"
+            limits:
+              cpu: "2000m"
+              memory: "6Gi"    # Needs ~4GB during model retraining
+          volumeMounts:
+            - name: f1-data
+              mountPath: /app/data
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 12   # 2 min max startup
+      volumes:
+        - name: f1-data
+          persistentVolumeClaim:
+            claimName: f1-data-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: f1-api
+  namespace: f1-predictor
+  labels:
+    app.kubernetes.io/name: f1-predictor
+    app.kubernetes.io/component: backend
+spec:
+  type: ClusterIP
+  selector:
+    app: f1-api
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP

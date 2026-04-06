@@ -26,6 +26,7 @@ evidently>=0.4.22
 # Agent / LLM tools
 openai>=1.23.0
 requests>=2.31.0
+fastf1>=3.4.0
 
 # Utilities
 python-dotenv>=1.0.0

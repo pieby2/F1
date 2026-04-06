@@ -1,0 +1,28 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+.git/
+.gitignore
+.vscode/
+.github/
+*.md
+*.log
+
+# Frontend dev deps (built in container)
+web/node_modules/
+web/dist/
+
+# Data caches (will be on PVC)
+data/fastf1_csv/fastf1_cache/
+data/fastf1_csv/_dataset_cache/
+data/fastf1_csv/_api_cache/
+
+# Temp files
+_tmp_*.py
+_prebuild_cache.py
+mlflow.db
+
+# K8s manifests
+k8s/

@@ -1,46 +1,46 @@
+version: "3.9"
+
 services:
-  mlflow:
-    image: python:3.11-slim
-    working_dir: /mlflow
-    volumes:
-      - ./mlruns:/mlflow/mlruns
-      - ./models:/mlflow/models
+  # ── Backend API ──
+  f1-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backend
+    container_name: f1-api
     ports:
-      - "5000:5000"
-    command: >
-      bash -c "pip install mlflow --quiet &&
-               mlflow server
-               --host 0.0.0.0
-               --port 5000
-               --backend-store-uri /mlflow/mlruns
-               --default-artifact-root /mlflow/models"
-
-  api:
-    build: .
-    working_dir: /app
+      - "8080:8080"
+    environment:
+      - DATA_ROOT=/app/data/fastf1_csv
+      - MODELS_ROOT=/app/models
+      - PREWARM_INFERENCE=1
+      - ALLOW_ORIGINS=*
     volumes:
-      - .:/app
+      - f1-data:/app/data
+      - f1-models:/app/models
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
+  # ── Frontend ──
+  f1-web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: f1-web
     ports:
-      - "8000:8000"
-    environment:
-      - MLFLOW_TRACKING_URI=http://mlflow:5000
-    env_file:
-      - .env
+      - "3000:80"
     depends_on:
-      - mlflow
-    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+      f1-api:
+        condition: service_healthy
+    restart: unless-stopped
 
-  prefect:
-    build: .
-    working_dir: /app
-    volumes:
-      - .:/app
-    environment:
-      - MLFLOW_TRACKING_URI=http://mlflow:5000
-    env_file:
-      - .env
-    depends_on:
-      - mlflow
-    command: python flows/pipeline.py
-    profiles:
-      - pipeline
+volumes:
+  f1-data:
+    driver: local
+  f1-models:
+    driver: local

@@ -1,0 +1,44 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: f1-predictor-ingress
+  namespace: f1-predictor
+  labels:
+    app.kubernetes.io/name: f1-predictor
+  annotations:
+    # AWS ALB Ingress Controller annotations
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    # Uncomment below for HTTPS (requires ACM certificate ARN)
+    # alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
+    # alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:<ACCOUNT_ID>:certificate/<CERT_ID>
+    # alb.ingress.kubernetes.io/ssl-redirect: "443"
+
+    # Health check config
+    alb.ingress.kubernetes.io/healthcheck-path: /
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "30"
+
+    # Timeout: 300s for retraining endpoint
+    alb.ingress.kubernetes.io/load-balancer-attributes: idle_timeout.timeout_seconds=300
+spec:
+  rules:
+    - http:
+        paths:
+          # API routes → backend service
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: f1-api
+                port:
+                  number: 8080
+          # All other routes → frontend
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: f1-web
+                port:
+                  number: 80

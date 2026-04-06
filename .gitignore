@@ -1,63 +1,22 @@
+# Data & Models
+data/
+models/
+*.zip
+mlflow.db
+
 # Python
 __pycache__/
-*.py[cod]
+*.pyc
 *.pyo
 *.pyd
-.Python
-*.egg
-*.egg-info/
-dist/
-build/
-eggs/
-parts/
-var/
-sdist/
-develop-eggs/
-.installed.cfg
-lib/
-lib64/
-
-# Virtual environments
-.venv/
-venv/
-env/
-ENV/
-
-# Environment variables
+.pytest_cache/
 .env
 
-# Data (large files / not committed)
-data/raw/
-data/processed/
-data/snapshots/
-data/*.duckdb
+# Node
+web/node_modules/
+web/dist/
 
-# MLflow artifacts and tracking
-mlruns/
-models/
-
-# Reports
-reports/
-
-# Prediction logs
-data/prediction_log.parquet
-
-# IDE
+# IDEs
 .vscode/
 .idea/
 *.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Docker
-*.tar
-
-# Jupyter
-.ipynb_checkpoints/
-*.ipynb
-
-# Tmp
-/tmp/
