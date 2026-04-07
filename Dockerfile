@@ -44,7 +44,6 @@ COPY train_race_points_model.py ./
 COPY train_dnf_model.py ./
 COPY train_race_outcome_multiclass_model.py ./
 COPY fastf1_csv_ingest.py ./
-COPY _prebuild_cache.py ./
 
 # Create placeholders for models and data since they are ignored in git
 RUN mkdir -p ./models ./data
