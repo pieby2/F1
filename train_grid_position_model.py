@@ -363,7 +363,8 @@ def build_driver_event_dataset(data_root: Path) -> pd.DataFrame:
 
     lap_files = sorted(lap_root.rglob("*.csv"))
     if not lap_files:
-        raise RuntimeError(f"No lap CSV files found under {lap_root}")
+        print(f"Warning: No lap CSV files found under {lap_root}. Returning empty subset.")
+        return pd.DataFrame()
 
     rows: list[dict[str, Any]] = []
     for lap_file in lap_files:
@@ -391,7 +392,8 @@ def build_driver_event_dataset(data_root: Path) -> pd.DataFrame:
             fp_wide = fp_wide.merge(subset, on=key_cols, how="outer")
 
     if fp_wide is None or fp_wide.empty:
-        raise RuntimeError("No FP1/FP2/FP3 session rows were found.")
+        print("Warning: No FP1/FP2/FP3 session rows were found. Returning empty dataset.")
+        return pd.DataFrame()
 
     # --- Sprint features (wide pivot) ---
     sprint_lap_data = session_df.loc[session_df["session"] == "sprint", key_cols + metric_cols].copy()

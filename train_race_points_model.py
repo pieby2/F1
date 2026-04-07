@@ -106,7 +106,8 @@ def parse_args() -> argparse.Namespace:
 def load_race_targets(data_root: Path) -> pd.DataFrame:
     race_files = sorted((data_root / "race_results").rglob("*.csv"))
     if not race_files:
-        raise RuntimeError("No race result CSV files found.")
+        print("Warning: No race result CSV files found. Returning empty dataset.")
+        return pd.DataFrame()
 
     frames: list[pd.DataFrame] = []
     for race_file in race_files:
@@ -308,7 +309,8 @@ def build_model_dataset(data_root: Path) -> pd.DataFrame:
     )
 
     if dataset.empty:
-        raise RuntimeError("No overlapping feature rows and race target rows were found.")
+        print("Warning: No overlapping feature rows and race target rows were found.")
+        return pd.DataFrame()
 
     if "team_race" in dataset.columns:
         dataset["team"] = dataset["team_race"].fillna(dataset["team"])
