@@ -93,10 +93,11 @@ class InferenceService:
             # Cache write failures must not block inference.
             pass
 
-    def _load_model(self, filename: str) -> Any:
+    def _load_model(self, filename: str) -> Any | None:
         path = self.models_root / filename
         if not path.exists():
-            raise FileNotFoundError(f"Required model file not found: {path}")
+            print(f"Warning: Required model file not found: {path}. Predictions will be zero until models are uploaded.")
+            return None
         return joblib.load(path)
 
     def _load_optional_model(self, filename: str) -> Any | None:
@@ -220,6 +221,8 @@ class InferenceService:
         return -1
 
     def _predict_binary_proba(self, model: Any, frame: pd.DataFrame) -> np.ndarray:
+        if model is None:
+            return np.zeros(len(frame), dtype=float)
         feature_cols = self._extract_feature_columns(model)
         if not feature_cols:
             return np.zeros(len(frame), dtype=float)
@@ -235,6 +238,8 @@ class InferenceService:
 
     def _predict_outcome_probabilities(self, frame: pd.DataFrame) -> dict[str, np.ndarray]:
         model = self.outcome_model
+        if model is None:
+            return {label: np.zeros(len(frame), dtype=float) for label in OUTCOME_CLASSES}
         feature_cols = self._extract_feature_columns(model)
         model_input = self._ensure_columns(frame, feature_cols)
         probabilities = model.predict_proba(model_input)
