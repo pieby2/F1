@@ -119,6 +119,9 @@ class InferenceService:
             if cache_enabled:
                 self._safe_write_cache(dataset, cache_stem)
 
+        if dataset is None or dataset.empty:
+            return pd.DataFrame(columns=["year", "round", "event_name", "driver"])
+
         dataset = dataset.sort_values(["year", "round", "event_name", "driver"]).reset_index(drop=True)
         dataset["year"] = pd.to_numeric(dataset["year"], errors="coerce").astype("Int64")
         dataset["round"] = pd.to_numeric(dataset["round"], errors="coerce").astype("Int64")
@@ -136,6 +139,9 @@ class InferenceService:
             dataset = build_points_dataset(self.data_root)
             if cache_enabled:
                 self._safe_write_cache(dataset, cache_stem)
+
+        if dataset is None or dataset.empty:
+            return pd.DataFrame(columns=["year", "round", "event_name", "driver"])
 
         dataset = dataset.sort_values(["year", "round", "event_name", "driver"]).reset_index(drop=True)
         dataset["year"] = pd.to_numeric(dataset["year"], errors="coerce").astype("Int64")
