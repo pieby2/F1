@@ -285,7 +285,12 @@ def add_context_features(dataset: pd.DataFrame) -> pd.DataFrame:
 
 def build_model_dataset(data_root: Path) -> pd.DataFrame:
     features = build_driver_event_dataset(data_root)
+    if features.empty:
+        return pd.DataFrame()
+        
     targets = load_race_targets(data_root)
+    if targets.empty:
+        return pd.DataFrame()
 
     key = ["year", "round", "event_name", "driver", "driver_number"]
     dataset = features.merge(
