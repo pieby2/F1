@@ -46,9 +46,8 @@ COPY train_race_outcome_multiclass_model.py ./
 COPY fastf1_csv_ingest.py ./
 COPY _prebuild_cache.py ./
 
-# Copy pre-trained models and data
-COPY models ./models
-COPY data ./data
+# Create placeholders for models and data since they are ignored in git
+RUN mkdir -p ./models ./data
 
 # Copy built frontend for nginx stage
 COPY --from=frontend-build /web/dist /app/frontend-dist
