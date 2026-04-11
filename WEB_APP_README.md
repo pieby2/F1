@@ -23,7 +23,7 @@ This project now includes:
 ### Run locally
 
 ```bash
-C:/Users/VICTUS/anaconda3/envs/swinfusion/python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8080
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8080
 ```
 
 ### Optional backend env vars
