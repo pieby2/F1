@@ -11,7 +11,7 @@ This project uses **FastF1** to ingest telemetry/session data, scikit-learn (Ran
 *   **Robust Feature Engineering:** Incorporates 170+ features including weather conditions (rain, track temp), circuit technical metrics (corner counts, straights), sprint performances, and penalty-adjusted official grid starts.
 *   **Offline Walk-Forward Training:** Memory-efficient architecture. Train models locally on your PC (where RAM is free), zip the models, and upload them to the web server.
 *   **Ensemble ML Prediction:** Uses blended probabilities from Grid Position, Points Finish, DNF, and Multi-Class Outcome estimators to produce a unified prediction score.
-*   **Data Ingestion API:** Hot-pull the latest race session data directly from the Ergrast API and FastF1.
+*   **Data Ingestion API:** Hot-pull the latest race session data directly from the Ergast API and FastF1.
 *   **Modern Interactive Dashboard:** A responsive, dark-themed React application with probability bars, podium projections, and driver insights.
 *   **AWS EKS Production-Ready:** Complete Docker multi-stage builds and Kubernetes infrastructure code included for high-availability deployment.
 
