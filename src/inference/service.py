@@ -23,10 +23,16 @@ class InferenceService:
         self,
         data_root: Path | str = Path("data") / "fastf1_csv",
         models_root: Path | str = Path("models"),
+        bundled_models_root: Path | str | None = None,
         cache_dir: Path | str | None = None,
     ) -> None:
         self.data_root = Path(data_root)
         self.models_root = Path(models_root)
+        self.bundled_models_root = (
+            Path(bundled_models_root)
+            if bundled_models_root is not None
+            else self.models_root.parent / "bundled_models"
+        )
         self.cache_dir = Path(cache_dir) if cache_dir is not None else self.data_root / "_api_cache"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -89,29 +95,42 @@ class InferenceService:
             pass
 
     def _load_model(self, filename: str) -> Any:
-        path = self.models_root / filename
-        if not path.exists():
-            raise FileNotFoundError(f"Required model file not found: {path}")
+        path = self._resolve_model_path(filename)
+        if path is None:
+            raise FileNotFoundError(f"Required model file not found: {filename}")
         return joblib.load(path)
 
     def _load_model_if_available(self, filename: str) -> Any | None:
-        model = self._model_cache.get(filename)
+        path = self._resolve_model_path(filename)
+        if path is None:
+            return None
+
+        cache_key = str(path.resolve())
+        model = self._model_cache.get(cache_key)
         if model is not None:
             return model
 
-        path = self.models_root / filename
-        if not path.exists():
-            return None
-
         model = joblib.load(path)
-        self._model_cache[filename] = model
+        self._model_cache[cache_key] = model
         return model
 
     def _load_optional_model(self, filename: str) -> Any | None:
-        path = self.models_root / filename
-        if not path.exists():
+        path = self._resolve_model_path(filename)
+        if path is None:
             return None
         return joblib.load(path)
+
+    def _resolve_model_path(self, filename: str) -> Path | None:
+        candidates = [self.models_root / filename]
+        bundled_path = self.bundled_models_root / filename
+        if bundled_path not in candidates:
+            candidates.append(bundled_path)
+
+        for path in candidates:
+            if path.exists():
+                return path
+
+        return None
 
     @property
     def points_model(self) -> Any | None:

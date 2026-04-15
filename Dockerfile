@@ -22,6 +22,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV DATA_ROOT=/app/data/fastf1_csv
 ENV MODELS_ROOT=/app/models
+ENV BUNDLED_MODELS_ROOT=/app/bundled_models
 ENV PREWARM_INFERENCE=1
 
 WORKDIR /app
@@ -44,6 +45,7 @@ COPY train_race_points_model.py ./
 COPY train_dnf_model.py ./
 COPY train_race_outcome_multiclass_model.py ./
 COPY fastf1_csv_ingest.py ./
+COPY models ./bundled_models
 
 # Create placeholders for runtime caches and uploaded model artifacts
 RUN mkdir -p ./models ./data

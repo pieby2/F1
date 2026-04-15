@@ -30,6 +30,7 @@ C:/Users/VICTUS/anaconda3/envs/swinfusion/python.exe -m uvicorn app.main:app --h
 
 - `DATA_ROOT` (default: `data/fastf1_csv`)
 - `MODELS_ROOT` (default: `models`)
+- `BUNDLED_MODELS_ROOT` (default: `bundled_models`) fallback location for the model artifacts baked into the backend image.
 - `INFERENCE_CACHE_DIR` (default: `data/fastf1_csv/_api_cache`)
 - `INFERENCE_ENABLE_DATASET_CACHE` (default: `1`)
 - `PREWARM_INFERENCE` (default: `1`) preloads models/features during API startup.
@@ -80,5 +81,5 @@ docker run -p 5173:80 f1-race-web
 
 - Event dates are sourced from FastF1 schedule (`fastf1.get_event_schedule`) when available.
 - If full context features are unavailable for a race, inference falls back to grid-only feature mode.
-- The prediction API can use whichever trained model artifacts are present; if all are missing, upload a models archive with at least one `.joblib` file.
+- The prediction API uses uploaded models first, then falls back to the bundled `.joblib` files in the backend image.
 - The API now caches prebuilt feature tables in `data/fastf1_csv/_api_cache` to reduce first-request latency.
