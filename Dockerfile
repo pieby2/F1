@@ -38,6 +38,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY app ./app
 COPY src ./src
+COPY models ./models
 COPY train_grid_position_model.py ./
 COPY train_grid_ranking_model.py ./
 COPY train_race_points_model.py ./
@@ -45,8 +46,8 @@ COPY train_dnf_model.py ./
 COPY train_race_outcome_multiclass_model.py ./
 COPY fastf1_csv_ingest.py ./
 
-# Create placeholders for models and data since they are ignored in git
-RUN mkdir -p ./models ./data
+# Ensure data directory exists for runtime caches and ingested CSVs
+RUN mkdir -p ./data
 
 # Copy built frontend for nginx stage
 COPY --from=frontend-build /web/dist /app/frontend-dist
