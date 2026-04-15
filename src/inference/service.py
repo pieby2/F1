@@ -93,11 +93,10 @@ class InferenceService:
             # Cache write failures must not block inference.
             pass
 
-    def _load_model(self, filename: str) -> Any | None:
+    def _load_model(self, filename: str) -> Any:
         path = self.models_root / filename
         if not path.exists():
-            print(f"Warning: Required model file not found: {path}. Predictions will be zero until models are uploaded.")
-            return None
+            raise FileNotFoundError(f"Required model file not found: {path}")
         return joblib.load(path)
 
     def _load_optional_model(self, filename: str) -> Any | None:
@@ -119,9 +118,6 @@ class InferenceService:
             if cache_enabled:
                 self._safe_write_cache(dataset, cache_stem)
 
-        if dataset is None or dataset.empty:
-            return pd.DataFrame(columns=["year", "round", "event_name", "driver"])
-
         dataset = dataset.sort_values(["year", "round", "event_name", "driver"]).reset_index(drop=True)
         dataset["year"] = pd.to_numeric(dataset["year"], errors="coerce").astype("Int64")
         dataset["round"] = pd.to_numeric(dataset["round"], errors="coerce").astype("Int64")
@@ -139,9 +135,6 @@ class InferenceService:
             dataset = build_points_dataset(self.data_root)
             if cache_enabled:
                 self._safe_write_cache(dataset, cache_stem)
-
-        if dataset is None or dataset.empty:
-            return pd.DataFrame(columns=["year", "round", "event_name", "driver"])
 
         dataset = dataset.sort_values(["year", "round", "event_name", "driver"]).reset_index(drop=True)
         dataset["year"] = pd.to_numeric(dataset["year"], errors="coerce").astype("Int64")
@@ -227,8 +220,6 @@ class InferenceService:
         return -1
 
     def _predict_binary_proba(self, model: Any, frame: pd.DataFrame) -> np.ndarray:
-        if model is None:
-            return np.zeros(len(frame), dtype=float)
         feature_cols = self._extract_feature_columns(model)
         if not feature_cols:
             return np.zeros(len(frame), dtype=float)
@@ -244,8 +235,6 @@ class InferenceService:
 
     def _predict_outcome_probabilities(self, frame: pd.DataFrame) -> dict[str, np.ndarray]:
         model = self.outcome_model
-        if model is None:
-            return {label: np.zeros(len(frame), dtype=float) for label in OUTCOME_CLASSES}
         feature_cols = self._extract_feature_columns(model)
         model_input = self._ensure_columns(frame, feature_cols)
         probabilities = model.predict_proba(model_input)
@@ -309,16 +298,16 @@ class InferenceService:
         return result
 
     def get_available_seasons(self) -> list[int]:
-        years = sorted(
-            {
-                int(v)
-                for v in pd.concat([self.grid_dataset["year"], self.points_dataset["year"]], ignore_index=True)
-                .dropna()
-                .astype(int)
-                .tolist()
-            }
-        )
-        return years
+        years = {
+            int(v)
+            for v in pd.concat([self.grid_dataset["year"], self.points_dataset["year"]], ignore_index=True)
+            .dropna()
+            .astype(int)
+            .tolist()
+        }
+        current_year = datetime.now(timezone.utc).date().year
+        years.update([current_year - 1, current_year, current_year + 1])
+        return sorted(list(years))
 
     def get_events(self, season: int) -> list[dict[str, Any]]:
         season_grid = self.grid_dataset.loc[self.grid_dataset["year"] == season, ["round", "event_name"]].copy()
@@ -427,8 +416,140 @@ class InferenceService:
         from_grid = from_grid.sort_values(by=["grid_position_target", "driver"], na_position="last")
         return from_grid.reset_index(drop=True), event_name, "grid_only"
 
+    def _api_live_session_fallback(self, season: int, round_number: int) -> tuple[pd.DataFrame, str, str]:
+        schedule = self._load_schedule(season)
+        event_meta = schedule.get(round_number, {})
+        event_name = event_meta.get("event_name", f"Round {round_number}")
+
+        try:
+            event = fastf1.get_event(season, round_number)
+        except Exception as exc:
+            raise ValueError(f"Event not found in schedule: {exc}") from exc
+
+        sessions_to_try = [
+            "Qualifying", "Sprint Qualifying", "Sprint Shootout", 
+            "Sprint", "Practice 3", "Practice 2", "Practice 1"
+        ]
+        results = None
+        for s_name in sessions_to_try:
+            try:
+                session = event.get_session(s_name)
+                session.load(telemetry=False, weather=False, messages=False)
+                if not session.results.empty:
+                    results = session.results
+                    break
+            except Exception:
+                pass
+        
+        if results is None or results.empty:
+            raise ValueError("No Practice or Qualifying data is available yet for this event.")
+
+        drivers = []
+        for row in results.itertuples():
+            drv = str(getattr(row, "Abbreviation", "")).strip()
+            num = str(getattr(row, "DriverNumber", "")).strip()
+            team = str(getattr(row, "TeamName", "")).strip()
+            finish = getattr(row, "Position", "")
+            
+            grid_pos = 10
+            try:
+                if str(finish).replace(".0", "").isdigit():
+                    grid_pos = int(float(finish))
+            except Exception:
+                pass
+
+            if drv and drv != "nan":
+                drivers.append({
+                    "driver": drv,
+                    "driver_number": num,
+                    "team": team,
+                    "grid_position_target": grid_pos
+                })
+        
+        if not drivers:
+            raise ValueError("No driver data parsed from API fallback.")
+             
+        frame = pd.DataFrame(drivers)
+        frame = frame.drop_duplicates(subset=["driver"]).reset_index(drop=True)
+        frame = frame.sort_values("grid_position_target").reset_index(drop=True)
+        frame["grid_position_target"] = np.arange(1, len(frame) + 1)
+
+        return frame, event_name, "api_live_session"
+
+    def _fetch_actual_race_results(self, season: int, round_number: int) -> dict[str, Any]:
+        schedule = self._load_schedule(season)
+        event_name = schedule.get(round_number, {}).get("event_name", f"Round {round_number}")
+        event_date = schedule.get(round_number, {}).get("date")
+
+        try:
+            session = fastf1.get_session(season, round_number, "Race")
+            session.load(telemetry=False, weather=False, messages=False)
+            results = session.results
+        except Exception as exc:
+            raise ValueError(f"Could not load actual race results: {exc}") from exc
+
+        if results.empty:
+            raise ValueError("Race results are not available yet.")
+
+        drivers = []
+        for row in results.itertuples():
+            drv = str(getattr(row, "Abbreviation", "")).strip()
+            fullname = str(getattr(row, "BroadcastName", drv)).strip()
+            num = str(getattr(row, "DriverNumber", "")).strip()
+            team = str(getattr(row, "TeamName", "")).strip()
+            finish = str(getattr(row, "ClassifiedPosition", "")).strip()
+            grid = str(getattr(row, "GridPosition", "")).strip()
+
+            try:
+                finish_pos = int(float(finish)) if finish.replace(".0", "").isdigit() else 99
+            except:
+                finish_pos = 99
+                
+            try:
+                grid_pos = int(float(grid)) if grid.replace(".0", "").isdigit() else None
+            except:
+                grid_pos = None
+
+            if drv and drv != "nan":
+                drivers.append({
+                    "driver_code": drv,
+                    "driver_name": self.driver_name_map.get(drv, fullname),
+                    "team": team,
+                    "grid_position": grid_pos,
+                    "predicted_finish": finish_pos,
+                    "p_win": 1.0 if finish_pos == 1 else 0.0,
+                    "p_podium": 1.0 if finish_pos <= 3 else 0.0,
+                    "p_points": 1.0 if finish_pos <= 10 else 0.0,
+                    "p_dnf": 1.0 if finish_pos == 99 else 0.0
+                })
+
+        drivers = sorted(drivers, key=lambda d: d["predicted_finish"])
+        # Update finishes sequentially for visual
+        for idx, d in enumerate(drivers):
+            if d["predicted_finish"] == 99:
+                 d["predicted_finish"] = "DNF"
+            else:
+                 d["predicted_finish"] = idx + 1
+
+        return {
+            "season": int(season),
+            "round": int(round_number),
+            "event_name": event_name,
+            "event_date": event_date,
+            "feature_source": "actual_race_results",
+            "drivers": drivers,
+        }
+
     def predict_race(self, season: int, round_number: int) -> dict[str, Any]:
-        frame, event_name, feature_source = self._event_feature_frame(season, round_number)
+        events = self.get_events(season)
+        ev_meta = next((e for e in events if e["round"] == round_number), None)
+        if ev_meta and ev_meta.get("has_race_context"):
+            return self._fetch_actual_race_results(season, round_number)
+
+        try:
+            frame, event_name, feature_source = self._event_feature_frame(season, round_number)
+        except ValueError:
+            frame, event_name, feature_source = self._api_live_session_fallback(season, round_number)
 
         if "team" not in frame.columns:
             frame["team"] = "UNKNOWN"
