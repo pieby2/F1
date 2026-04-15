@@ -334,6 +334,7 @@ export default function App() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [historyDigest, setHistoryDigest] = useState(null);
   const [historyError, setHistoryError] = useState("");
+  const [historySeason, setHistorySeason] = useState("");
   const [dashboardTab, setDashboardTab] = useState("news");
   
   const [prediction, setPrediction] = useState(null);
@@ -457,9 +458,18 @@ export default function App() {
       setHistoryError("");
 
       try {
-        const digest = await getHistorySummary(selectedSeason ? Number(selectedSeason) : null);
+        const digest = await getHistorySummary(historySeason ? Number(historySeason) : null);
         if (!cancelled) {
           setHistoryDigest(digest);
+          if (!historySeason && digest?.resolved_season) {
+            setHistorySeason(String(digest.resolved_season));
+          }
+          if (Array.isArray(digest?.available_seasons) && digest.available_seasons.length > 0) {
+            const seasonValue = historySeason ? Number(historySeason) : digest.resolved_season;
+            if (!digest.available_seasons.includes(seasonValue)) {
+              setHistorySeason(String(digest.available_seasons[digest.available_seasons.length - 1]));
+            }
+          }
         }
       } catch (err) {
         if (!cancelled) {
@@ -476,7 +486,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [dashboardTab, selectedSeason]);
+  }, [dashboardTab, historySeason]);
 
   async function handlePredict() {
     if (!selectedSeason || !selectedRound) return;
@@ -557,8 +567,11 @@ export default function App() {
     setIsLoadingHistory(true);
     setHistoryError("");
     try {
-      const digest = await getHistorySummary(selectedSeason ? Number(selectedSeason) : null);
+      const digest = await getHistorySummary(historySeason ? Number(historySeason) : null);
       setHistoryDigest(digest);
+      if (!historySeason && digest?.resolved_season) {
+        setHistorySeason(String(digest.resolved_season));
+      }
     } catch (err) {
       setHistoryError(err.message || "Failed to load Formula 1 history.");
     } finally {
@@ -749,7 +762,7 @@ export default function App() {
             <div className="history-controls">
               <div className="history-pill">
                 <span>Requested</span>
-                <strong>{selectedSeason || "-"}</strong>
+                <strong>{historySeason || "-"}</strong>
               </div>
               <div className="history-pill">
                 <span>Resolved</span>
@@ -762,6 +775,21 @@ export default function App() {
               <div className="history-pill">
                 <span>Teams</span>
                 <strong>{historyDigest?.teams?.length ?? 0}</strong>
+              </div>
+              <div className="field history-field">
+                <label className="f1-font">PAST SEASON</label>
+                <select
+                  className="f1-select history-select"
+                  value={historySeason}
+                  onChange={(e) => setHistorySeason(e.target.value)}
+                  disabled={isLoadingHistory || !historyDigest}
+                >
+                  {(historyDigest?.available_seasons || []).map((season) => (
+                    <option key={season} value={season}>
+                      {season}
+                    </option>
+                  ))}
+                </select>
               </div>
               <button className="f1-btn secondary f1-font history-refresh-btn" onClick={handleRefreshHistory} disabled={isLoadingHistory}>
                 {isLoadingHistory ? "LOADING..." : "REFRESH HISTORY >>"}

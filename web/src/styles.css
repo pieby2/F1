@@ -462,6 +462,15 @@ body {
   justify-content: flex-end;
 }
 
+.history-field {
+  flex: 0 0 auto;
+  min-width: 130px;
+}
+
+.history-select {
+  min-width: 130px;
+}
+
 .history-pill {
   background: #17171f;
   border: 1px solid #343442;
