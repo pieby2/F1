@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
+from pathlib import Path
+import tempfile
+import zipfile
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -60,6 +63,47 @@ def startup_warm_cache() -> None:
     if enabled:
         get_service()
 
+
+@app.post("/upload_models")
+async def upload_models(file: UploadFile = File(...)) -> dict[str, str]:
+    if not file.filename or not file.filename.lower().endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Please upload a .zip archive containing model files.")
+
+    models_root = Path(os.getenv("MODELS_ROOT", "models"))
+    models_root.mkdir(parents=True, exist_ok=True)
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded archive is empty.")
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        archive_path = Path(temp_dir) / "models_upload.zip"
+        archive_path.write_bytes(content)
+
+        try:
+            with zipfile.ZipFile(archive_path) as archive:
+                members = [name for name in archive.namelist() if name and not name.endswith("/")]
+                if not members:
+                    raise HTTPException(status_code=400, detail="Uploaded archive does not contain any files.")
+
+                if not any(name.lower().endswith(".joblib") for name in members):
+                    raise HTTPException(status_code=400, detail="Uploaded archive must contain .joblib model files.")
+
+                root = models_root.resolve()
+                for member in members:
+                    member_path = (models_root / member).resolve()
+                    if member_path != root and root not in member_path.parents:
+                        raise HTTPException(status_code=400, detail=f"Archive contains an unsafe path: {member}")
+
+                for existing in models_root.glob("*.joblib"):
+                    existing.unlink(missing_ok=True)
+
+                archive.extractall(models_root)
+        except zipfile.BadZipFile as exc:
+            raise HTTPException(status_code=400, detail="Uploaded file is not a valid zip archive.") from exc
+
+    return {"message": "Models uploaded successfully."}
+
 allow_origins = [item.strip() for item in os.getenv("ALLOW_ORIGINS", "*").split(",") if item.strip()]
 app.add_middleware(
     CORSMiddleware,
@@ -104,6 +148,8 @@ def predict_race(payload: PredictRaceRequest) -> RacePredictionResponse:
 
     try:
         prediction = service.predict_race(season=payload.season, round_number=payload.round)
+    except (FileNotFoundError, RuntimeError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
