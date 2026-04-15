@@ -270,6 +270,9 @@ class InferenceService:
         return -1
 
     def _predict_binary_proba(self, model: Any, frame: pd.DataFrame) -> np.ndarray:
+        if model is None:
+            return np.zeros(len(frame), dtype=float)
+
         feature_cols = self._extract_feature_columns(model)
         if not feature_cols:
             return np.zeros(len(frame), dtype=float)
@@ -284,6 +287,9 @@ class InferenceService:
         return probabilities[:, idx].astype(float)
 
     def _predict_outcome_probabilities(self, frame: pd.DataFrame, model: Any) -> dict[str, np.ndarray]:
+        if model is None:
+            return {label: np.zeros(len(frame), dtype=float) for label in OUTCOME_CLASSES}
+
         feature_cols = self._extract_feature_columns(model)
         model_input = self._ensure_columns(frame, feature_cols)
         probabilities = model.predict_proba(model_input)
@@ -320,6 +326,23 @@ class InferenceService:
         encoded = preprocessor.transform(model_input)
         scores = ranker.predict(encoded)
         return np.asarray(scores, dtype=float)
+
+    @staticmethod
+    def _scale_signal(values: np.ndarray) -> np.ndarray:
+        values = np.asarray(values, dtype=float)
+        if len(values) == 0:
+            return values
+
+        finite = values[np.isfinite(values)]
+        if len(finite) == 0:
+            return np.zeros(len(values), dtype=float)
+
+        lower = float(np.nanmin(finite))
+        upper = float(np.nanmax(finite))
+        if not np.isfinite(lower) or not np.isfinite(upper) or upper <= lower:
+            return np.zeros(len(values), dtype=float)
+
+        return np.clip((values - lower) / (upper - lower), 0.0, 1.0)
 
     def _load_schedule(self, season: int) -> dict[int, dict[str, str | None]]:
         if season in self.schedule_cache:
@@ -612,18 +635,10 @@ class InferenceService:
         points_model = self.points_model
         dnf_model = self.dnf_model
         outcome_model = self.outcome_model
-        missing_models = [
-            name
-            for name, model in (
-                ("race_points_classifier.joblib", points_model),
-                ("dnf_classifier.joblib", dnf_model),
-                ("race_outcome_multiclass.joblib", outcome_model),
-            )
-            if model is None
-        ]
-        if missing_models:
+        available_models = [model for model in (points_model, dnf_model, outcome_model) if model is not None]
+        if not available_models:
             raise RuntimeError(
-                "Missing required model files: " + ", ".join(missing_models) + ". Upload a models archive first."
+                "No usable model files were found. Upload a models archive containing at least one trained model."
             )
 
         if "team" not in frame.columns:
@@ -634,16 +649,6 @@ class InferenceService:
         dnf_model_prob = self._predict_binary_proba(dnf_model, frame)
         outcome_prob = self._predict_outcome_probabilities(frame, outcome_model)
 
-        p_win = outcome_prob["WIN"]
-        p_podium = np.clip(outcome_prob["WIN"] + outcome_prob["PODIUM"], 0.0, 1.0)
-        p_points_outcome = np.clip(
-            outcome_prob["WIN"] + outcome_prob["PODIUM"] + outcome_prob["POINTS"],
-            0.0,
-            1.0,
-        )
-        p_points = np.clip(0.55 * points_prob + 0.45 * p_points_outcome, 0.0, 1.0)
-        p_dnf = np.clip(0.65 * dnf_model_prob + 0.35 * outcome_prob["DNF"], 0.0, 1.0)
-
         grid_score = self._predict_grid_score(frame, self.grid_rank_bundle)
         if len(grid_score):
             norm = np.nanstd(grid_score)
@@ -651,6 +656,33 @@ class InferenceService:
             grid_signal = (grid_score - np.nanmean(grid_score)) / norm
         else:
             grid_signal = np.zeros(len(frame), dtype=float)
+
+        grid_signal = self._scale_signal(grid_signal)
+
+        p_points_outcome = np.clip(
+            outcome_prob["WIN"] + outcome_prob["PODIUM"] + outcome_prob["POINTS"],
+            0.0,
+            1.0,
+        )
+        p_points = np.clip(0.7 * np.maximum(points_prob, p_points_outcome) + 0.3 * grid_signal, 0.0, 1.0)
+        p_dnf = np.clip(0.65 * dnf_model_prob + 0.35 * outcome_prob["DNF"], 0.0, 1.0)
+
+        p_win = np.clip(
+            np.maximum(
+                outcome_prob["WIN"],
+                0.5 * points_prob * (1.0 - p_dnf) + 0.1 * (1.0 - grid_signal),
+            ),
+            0.0,
+            1.0,
+        )
+        p_podium = np.clip(
+            np.maximum(
+                outcome_prob["WIN"] + outcome_prob["PODIUM"],
+                0.45 * p_points + 0.35 * (1.0 - p_dnf),
+            ),
+            0.0,
+            1.0,
+        )
 
         finish_score = (
             2.2 * p_win

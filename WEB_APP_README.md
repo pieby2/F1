@@ -80,4 +80,5 @@ docker run -p 5173:80 f1-race-web
 
 - Event dates are sourced from FastF1 schedule (`fastf1.get_event_schedule`) when available.
 - If full context features are unavailable for a race, inference falls back to grid-only feature mode.
+- The prediction API can use whichever trained model artifacts are present; if all are missing, upload a models archive with at least one `.joblib` file.
 - The API now caches prebuilt feature tables in `data/fastf1_csv/_api_cache` to reduce first-request latency.
