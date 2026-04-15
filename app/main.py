@@ -46,14 +46,8 @@ class RacePredictionResponse(BaseModel):
 def get_service() -> InferenceService:
     data_root = os.getenv("DATA_ROOT", "data/fastf1_csv")
     models_root = os.getenv("MODELS_ROOT", "models")
-    bundled_models_root = os.getenv("BUNDLED_MODELS_ROOT", "bundled_models")
     cache_dir = os.getenv("INFERENCE_CACHE_DIR", "data/fastf1_csv/_api_cache")
-    return InferenceService(
-        data_root=data_root,
-        models_root=models_root,
-        bundled_models_root=bundled_models_root,
-        cache_dir=cache_dir,
-    )
+    return InferenceService(data_root=data_root, models_root=models_root, cache_dir=cache_dir)
 
 
 app = FastAPI(

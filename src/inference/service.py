@@ -23,16 +23,10 @@ class InferenceService:
         self,
         data_root: Path | str = Path("data") / "fastf1_csv",
         models_root: Path | str = Path("models"),
-        bundled_models_root: Path | str | None = None,
         cache_dir: Path | str | None = None,
     ) -> None:
         self.data_root = Path(data_root)
         self.models_root = Path(models_root)
-        self.bundled_models_root = (
-            Path(bundled_models_root)
-            if bundled_models_root is not None
-            else self.models_root.parent / "bundled_models"
-        )
         self.cache_dir = Path(cache_dir) if cache_dir is not None else self.data_root / "_api_cache"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -95,14 +89,14 @@ class InferenceService:
             pass
 
     def _load_model(self, filename: str) -> Any:
-        path = self._resolve_model_path(filename)
-        if path is None:
+        path = self.models_root / filename
+        if not path.exists():
             raise FileNotFoundError(f"Required model file not found: {filename}")
         return joblib.load(path)
 
     def _load_model_if_available(self, filename: str) -> Any | None:
-        path = self._resolve_model_path(filename)
-        if path is None:
+        path = self.models_root / filename
+        if not path.exists():
             return None
 
         cache_key = str(path.resolve())
@@ -115,22 +109,10 @@ class InferenceService:
         return model
 
     def _load_optional_model(self, filename: str) -> Any | None:
-        path = self._resolve_model_path(filename)
-        if path is None:
+        path = self.models_root / filename
+        if not path.exists():
             return None
         return joblib.load(path)
-
-    def _resolve_model_path(self, filename: str) -> Path | None:
-        candidates = [self.models_root / filename]
-        bundled_path = self.bundled_models_root / filename
-        if bundled_path not in candidates:
-            candidates.append(bundled_path)
-
-        for path in candidates:
-            if path.exists():
-                return path
-
-        return None
 
     @property
     def points_model(self) -> Any | None:
@@ -654,11 +636,7 @@ class InferenceService:
         points_model = self.points_model
         dnf_model = self.dnf_model
         outcome_model = self.outcome_model
-        available_models = [model for model in (points_model, dnf_model, outcome_model) if model is not None]
-        if not available_models:
-            raise RuntimeError(
-                "No usable model files were found. Upload a models archive containing at least one trained model."
-            )
+        has_trained_models = any(model is not None for model in (points_model, dnf_model, outcome_model))
 
         if "team" not in frame.columns:
             frame["team"] = "UNKNOWN"
@@ -669,39 +647,53 @@ class InferenceService:
         outcome_prob = self._predict_outcome_probabilities(frame, outcome_model)
 
         grid_score = self._predict_grid_score(frame, self.grid_rank_bundle)
-        if len(grid_score):
+        if len(grid_score) and np.any(np.isfinite(grid_score)):
             norm = np.nanstd(grid_score)
             norm = float(norm) if np.isfinite(norm) and norm > 0 else 1.0
             grid_signal = (grid_score - np.nanmean(grid_score)) / norm
         else:
             grid_signal = np.zeros(len(frame), dtype=float)
 
+        if not has_trained_models:
+            if "grid_position_target" in frame.columns:
+                grid_position = pd.to_numeric(frame["grid_position_target"], errors="coerce")
+                grid_position = grid_position.fillna(float(len(frame) + 1)).to_numpy(dtype=float)
+                grid_signal = self._scale_signal(-grid_position)
+            else:
+                grid_signal = np.linspace(1.0, 0.0, num=len(frame), dtype=float) if len(frame) else np.array([], dtype=float)
+
         grid_signal = self._scale_signal(grid_signal)
 
-        p_points_outcome = np.clip(
-            outcome_prob["WIN"] + outcome_prob["PODIUM"] + outcome_prob["POINTS"],
-            0.0,
-            1.0,
-        )
-        p_points = np.clip(0.7 * np.maximum(points_prob, p_points_outcome) + 0.3 * grid_signal, 0.0, 1.0)
-        p_dnf = np.clip(0.65 * dnf_model_prob + 0.35 * outcome_prob["DNF"], 0.0, 1.0)
+        if has_trained_models:
+            p_points_outcome = np.clip(
+                outcome_prob["WIN"] + outcome_prob["PODIUM"] + outcome_prob["POINTS"],
+                0.0,
+                1.0,
+            )
+            p_points = np.clip(0.7 * np.maximum(points_prob, p_points_outcome) + 0.3 * grid_signal, 0.0, 1.0)
+            p_dnf = np.clip(0.65 * dnf_model_prob + 0.35 * outcome_prob["DNF"], 0.0, 1.0)
 
-        p_win = np.clip(
-            np.maximum(
-                outcome_prob["WIN"],
-                0.5 * points_prob * (1.0 - p_dnf) + 0.1 * (1.0 - grid_signal),
-            ),
-            0.0,
-            1.0,
-        )
-        p_podium = np.clip(
-            np.maximum(
-                outcome_prob["WIN"] + outcome_prob["PODIUM"],
-                0.45 * p_points + 0.35 * (1.0 - p_dnf),
-            ),
-            0.0,
-            1.0,
-        )
+            p_win = np.clip(
+                np.maximum(
+                    outcome_prob["WIN"],
+                    0.5 * points_prob * (1.0 - p_dnf) + 0.1 * (1.0 - grid_signal),
+                ),
+                0.0,
+                1.0,
+            )
+            p_podium = np.clip(
+                np.maximum(
+                    outcome_prob["WIN"] + outcome_prob["PODIUM"],
+                    0.45 * p_points + 0.35 * (1.0 - p_dnf),
+                ),
+                0.0,
+                1.0,
+            )
+        else:
+            p_win = np.clip(0.15 + 0.7 * grid_signal, 0.0, 1.0)
+            p_podium = np.clip(0.25 + 0.6 * grid_signal, 0.0, 1.0)
+            p_points = np.clip(0.4 + 0.5 * grid_signal, 0.0, 1.0)
+            p_dnf = np.clip(0.2 + 0.5 * (1.0 - grid_signal), 0.0, 1.0)
 
         finish_score = (
             2.2 * p_win
