@@ -334,6 +334,7 @@ export default function App() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [historyDigest, setHistoryDigest] = useState(null);
   const [historyError, setHistoryError] = useState("");
+  const [dashboardTab, setDashboardTab] = useState("news");
   
   const [prediction, setPrediction] = useState(null);
   const [selectedDriver, setSelectedDriver] = useState(null);
@@ -420,6 +421,7 @@ export default function App() {
     let cancelled = false;
 
     async function loadNews() {
+      if (dashboardTab !== "news") return;
       setIsLoadingNews(true);
       setNewsError("");
 
@@ -443,19 +445,19 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [newsArticleCount]);
+  }, [dashboardTab, newsArticleCount]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadHistory() {
-      if (!selectedSeason) return;
+      if (dashboardTab !== "history") return;
 
       setIsLoadingHistory(true);
       setHistoryError("");
 
       try {
-        const digest = await getHistorySummary(Number(selectedSeason));
+        const digest = await getHistorySummary(selectedSeason ? Number(selectedSeason) : null);
         if (!cancelled) {
           setHistoryDigest(digest);
         }
@@ -474,7 +476,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [selectedSeason]);
+  }, [dashboardTab, selectedSeason]);
 
   async function handlePredict() {
     if (!selectedSeason || !selectedRound) return;
@@ -548,6 +550,19 @@ export default function App() {
       setNewsError(err.message || "Failed to load Formula 1 news.");
     } finally {
       setIsLoadingNews(false);
+    }
+  }
+
+  async function handleRefreshHistory() {
+    setIsLoadingHistory(true);
+    setHistoryError("");
+    try {
+      const digest = await getHistorySummary(selectedSeason ? Number(selectedSeason) : null);
+      setHistoryDigest(digest);
+    } catch (err) {
+      setHistoryError(err.message || "Failed to load Formula 1 history.");
+    } finally {
+      setIsLoadingHistory(false);
     }
   }
 
@@ -632,6 +647,24 @@ export default function App() {
           {error && <div className={error.startsWith("✅") ? "msg success" : "msg error"}>{error}</div>}
         </section>
 
+        <section className="dashboard-switcher f1-borders">
+          <div className="dashboard-tabs">
+            <button
+              className={`f1-tab dashboard-tab f1-font ${dashboardTab === "news" ? "active" : ""}`}
+              onClick={() => setDashboardTab("news")}
+            >
+              NEWS DIGEST
+            </button>
+            <button
+              className={`f1-tab dashboard-tab f1-font ${dashboardTab === "history" ? "active" : ""}`}
+              onClick={() => setDashboardTab("history")}
+            >
+              DRIVER HISTORY
+            </button>
+          </div>
+        </section>
+
+        {dashboardTab === "news" && (
         <section className="f1-news-section f1-borders">
           <div className="news-header">
             <div>
@@ -701,7 +734,9 @@ export default function App() {
             </div>
           )}
         </section>
+        )}
 
+        {dashboardTab === "history" && (
         <section className="f1-history-section f1-borders">
           <div className="history-header">
             <div>
@@ -728,6 +763,9 @@ export default function App() {
                 <span>Teams</span>
                 <strong>{historyDigest?.teams?.length ?? 0}</strong>
               </div>
+              <button className="f1-btn secondary f1-font history-refresh-btn" onClick={handleRefreshHistory} disabled={isLoadingHistory}>
+                {isLoadingHistory ? "LOADING..." : "REFRESH HISTORY >>"}
+              </button>
             </div>
           </div>
 
@@ -777,6 +815,7 @@ export default function App() {
             </div>
           )}
         </section>
+        )}
 
         {prediction && (
           <section className="f1-results-section fade-in">
