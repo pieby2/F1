@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getEvents, getNextEvent, getSeasons, predictRace, uploadModels, ingestData } from "./api";
+import { getEvents, getNewsSummary, getNextEvent, getSeasons, predictRace, uploadModels, ingestData } from "./api";
 
 const TEAM_IDS = {
   "Red Bull": "red-bull",
@@ -29,6 +29,13 @@ function toPct(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return "-";
   return `${(Math.min(1, Math.max(0, numeric)) * 100).toFixed(1)}%`;
+}
+
+function formatNewsDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 function AnimatedBar({ value, kind = "chance", delay = 0 }) {
@@ -207,6 +214,10 @@ export default function App() {
   const fileInputRef = useRef(null);
   const [isIngesting, setIsIngesting] = useState(false);
   const [nextEventLoading, setNextEventLoading] = useState(false);
+  const [newsArticleCount, setNewsArticleCount] = useState(6);
+  const [isLoadingNews, setIsLoadingNews] = useState(false);
+  const [newsDigest, setNewsDigest] = useState(null);
+  const [newsError, setNewsError] = useState("");
   
   const [prediction, setPrediction] = useState(null);
   const [selectedDriver, setSelectedDriver] = useState(null);
@@ -289,6 +300,35 @@ export default function App() {
     return Object.values(teams).sort((a,b) => b.p_win - a.p_win);
   }, [prediction]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadNews() {
+      setIsLoadingNews(true);
+      setNewsError("");
+
+      try {
+        const digest = await getNewsSummary(newsArticleCount);
+        if (!cancelled) {
+          setNewsDigest(digest);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setNewsError(err.message || "Failed to load Formula 1 news.");
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingNews(false);
+        }
+      }
+    }
+
+    loadNews();
+    return () => {
+      cancelled = true;
+    };
+  }, [newsArticleCount]);
+
   async function handlePredict() {
     if (!selectedSeason || !selectedRound) return;
     setIsPredicting(true);
@@ -351,6 +391,31 @@ export default function App() {
     }
   }
 
+  async function handleRefreshNews() {
+    setIsLoadingNews(true);
+    setNewsError("");
+    try {
+      const digest = await getNewsSummary(newsArticleCount);
+      setNewsDigest(digest);
+    } catch (err) {
+      setNewsError(err.message || "Failed to load Formula 1 news.");
+    } finally {
+      setIsLoadingNews(false);
+    }
+  }
+
+  const newsUpdatedAt = useMemo(() => {
+    if (!newsDigest?.generated_at) return "";
+    const date = new Date(newsDigest.generated_at);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }, [newsDigest]);
+
   return (
     <div className="f1-shell">
       <nav className="f1-navbar">
@@ -406,6 +471,76 @@ export default function App() {
              </button>
           </div>
           {error && <div className={error.startsWith("✅") ? "msg success" : "msg error"}>{error}</div>}
+        </section>
+
+        <section className="f1-news-section f1-borders">
+          <div className="news-header">
+            <div>
+              <span className="section-kicker f1-font">LATEST COVERAGE</span>
+              <h2 className="f1-font">F1 NEWS DIGEST</h2>
+              <p className="news-subtitle">
+                A quick summary of the latest Formula 1 headlines from {newsArticleCount} recent articles.
+              </p>
+            </div>
+            <div className="news-controls">
+              <div className="field news-field">
+                <label className="f1-font">ARTICLES</label>
+                <select
+                  className="f1-select news-select"
+                  value={newsArticleCount}
+                  onChange={(e) => setNewsArticleCount(Number(e.target.value))}
+                >
+                  <option value={5}>5</option>
+                  <option value={6}>6</option>
+                  <option value={7}>7</option>
+                </select>
+              </div>
+              <button className="f1-btn secondary f1-font news-refresh-btn" onClick={handleRefreshNews} disabled={isLoadingNews}>
+                {isLoadingNews ? "SUMMARIZING..." : "REFRESH NEWS >>"}
+              </button>
+            </div>
+          </div>
+
+          {newsError && <div className="msg error">{newsError}</div>}
+
+          {isLoadingNews && !newsDigest && <div className="news-loading">Summarizing the latest Formula 1 headlines...</div>}
+
+          {newsDigest && (
+            <div className="news-content">
+              <div className="news-summary-panel">
+                <div className="news-summary-topline">
+                  <span className="news-summary-label f1-font">TOPLINE</span>
+                  {newsUpdatedAt && <span className="news-summary-updated">Updated {newsUpdatedAt}</span>}
+                </div>
+                <p>{newsDigest.overall_summary}</p>
+                <div className="news-topic-list">
+                  {Array.isArray(newsDigest.top_topics) && newsDigest.top_topics.map((topic) => (
+                    <span key={topic} className="news-topic-chip">{topic}</span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="news-grid">
+                {newsDigest.articles.map((article, index) => (
+                  <a
+                    key={`${article.url}-${index}`}
+                    className="news-card f1-borders"
+                    href={article.url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <div className="news-card-meta">
+                      <span>{article.source}</span>
+                      <span>{formatNewsDate(article.published_at)}</span>
+                    </div>
+                    <h3 className="f1-font news-card-title">{article.title}</h3>
+                    <p className="news-card-summary">{article.summary}</p>
+                    <div className="news-card-link">Open article</div>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
         </section>
 
         {prediction && (

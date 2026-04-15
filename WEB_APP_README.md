@@ -18,6 +18,7 @@ This project now includes:
 - `GET /seasons`
 - `GET /events/{season}`
 - `GET /events/next`
+- `GET /news/summary?count=5..7`
 - `POST /predict_race`
 
 ### Run locally
@@ -33,6 +34,10 @@ C:/Users/VICTUS/anaconda3/envs/swinfusion/python.exe -m uvicorn app.main:app --h
 - `INFERENCE_CACHE_DIR` (default: `data/fastf1_csv/_api_cache`)
 - `INFERENCE_ENABLE_DATASET_CACHE` (default: `1`)
 - `PREWARM_INFERENCE` (default: `1`) preloads models/features during API startup.
+- `F1_NEWS_QUERY` (default: `"Formula 1" OR F1 when:7d`) controls the news search query.
+- `F1_NEWS_FEED_URL` (default: Google News RSS search endpoint) controls the news feed source.
+- `F1_NEWS_TIMEOUT_SECONDS` (default: `12`) controls the RSS fetch timeout.
+- `F1_NEWS_CACHE_TTL_SECONDS` (default: `900`) keeps the news digest fresh while avoiding repeated fetches.
 
 ### Request example
 
@@ -80,5 +85,6 @@ docker run -p 5173:80 f1-race-web
 
 - Event dates are sourced from FastF1 schedule (`fastf1.get_event_schedule`) when available.
 - If full context features are unavailable for a race, inference falls back to grid-only feature mode.
+- The dashboard includes a Formula 1 news digest that summarizes 5 to 7 recent headlines and refreshes on demand.
 - The prediction API falls back to a grid-based heuristic when no trained models are mounted.
 - The API now caches prebuilt feature tables in `data/fastf1_csv/_api_cache` to reduce first-request latency.

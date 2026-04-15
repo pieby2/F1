@@ -9,9 +9,11 @@ from typing import Any
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Query
 from pydantic import BaseModel, Field
 
 from src.inference import InferenceService
+from src.news_service import Formula1NewsService
 
 
 class PredictRaceRequest(BaseModel):
@@ -42,12 +44,43 @@ class RacePredictionResponse(BaseModel):
     drivers: list[DriverPrediction]
 
 
+class NewsArticleSummary(BaseModel):
+    title: str
+    summary: str
+    source: str
+    url: str
+    published_at: str | None
+
+
+class NewsDigestResponse(BaseModel):
+    query: str
+    count: int
+    generated_at: str
+    overall_summary: str
+    top_topics: list[str]
+    articles: list[NewsArticleSummary]
+
+
 @lru_cache(maxsize=1)
 def get_service() -> InferenceService:
     data_root = os.getenv("DATA_ROOT", "data/fastf1_csv")
     models_root = os.getenv("MODELS_ROOT", "models")
     cache_dir = os.getenv("INFERENCE_CACHE_DIR", "data/fastf1_csv/_api_cache")
     return InferenceService(data_root=data_root, models_root=models_root, cache_dir=cache_dir)
+
+
+@lru_cache(maxsize=1)
+def get_news_service() -> Formula1NewsService:
+    query = os.getenv("F1_NEWS_QUERY", '"Formula 1" OR F1 when:7d')
+    feed_url = os.getenv("F1_NEWS_FEED_URL", "https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en")
+    timeout = float(os.getenv("F1_NEWS_TIMEOUT_SECONDS", "12"))
+    cache_ttl = int(os.getenv("F1_NEWS_CACHE_TTL_SECONDS", "900"))
+    return Formula1NewsService(
+        query=query,
+        feed_url_template=feed_url,
+        timeout_seconds=timeout,
+        cache_ttl_seconds=cache_ttl,
+    )
 
 
 app = FastAPI(
@@ -140,6 +173,18 @@ def events(season: int) -> dict[str, Any]:
     service = get_service()
     values = service.get_events(season)
     return {"season": int(season), "events": values}
+
+
+@app.get("/news/summary", response_model=NewsDigestResponse)
+def news_summary(count: int = Query(default=6, ge=5, le=7)) -> NewsDigestResponse:
+    service = get_news_service()
+
+    try:
+        payload = service.build_digest(count=count)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    return NewsDigestResponse(**payload)
 
 
 @app.post("/predict_race", response_model=RacePredictionResponse)

@@ -39,6 +39,10 @@ export async function getNextEvent() {
   return fetchJson("/events/next");
 }
 
+export async function getNewsSummary(count = 6) {
+  return fetchJson(`/news/summary?count=${count}`);
+}
+
 export async function predictRace(season, round) {
   return fetchJson("/predict_race", {
     method: "POST",
