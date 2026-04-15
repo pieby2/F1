@@ -411,6 +411,151 @@ body {
   font-size: 0.82rem;
 }
 
+/* History Panel */
+.f1-history-section {
+  background: linear-gradient(180deg, rgba(10, 11, 16, 0.98), rgba(13, 13, 20, 0.98));
+  padding: 1.5rem;
+  margin-bottom: 2.5rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-end;
+  margin-bottom: 1.25rem;
+}
+
+.history-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  justify-content: flex-end;
+}
+
+.history-pill {
+  background: #17171f;
+  border: 1px solid #343442;
+  padding: 0.55rem 0.85rem;
+  min-width: 108px;
+}
+
+.history-pill span {
+  display: block;
+  color: #8b8b94;
+  font-size: 0.75rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 0.18rem;
+}
+
+.history-pill strong {
+  display: block;
+  font-family: "Titillium Web", sans-serif;
+  font-size: 1rem;
+}
+
+.history-loading {
+  color: #b7b7bd;
+  padding: 0.75rem 0;
+}
+
+.history-content {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.history-summary-panel {
+  background: rgba(0, 0, 0, 0.32);
+  border-left: 4px solid var(--f1-red);
+  padding: 1rem 1.1rem;
+}
+
+.history-note {
+  margin: 0.75rem 0 0;
+  color: #c9c9cf;
+  font-size: 0.92rem;
+}
+
+.history-grid-block {
+  display: grid;
+  gap: 1rem;
+}
+
+.history-section-heading h3 {
+  margin: 0.15rem 0 0;
+  font-size: 1.35rem;
+  letter-spacing: 1px;
+}
+
+.history-grid {
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+
+.history-card {
+  background: var(--f1-dark);
+  padding: 1.2rem;
+  position: relative;
+  overflow: hidden;
+  opacity: 0;
+  animation: slideUp 0.5s ease forwards;
+}
+
+.history-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.history-card-kicker {
+  display: inline-block;
+  color: var(--f1-red);
+  font-size: 0.75rem;
+  letter-spacing: 2px;
+  margin-bottom: 0.3rem;
+}
+
+.history-card-title {
+  margin: 0;
+  font-size: 1.65rem;
+  letter-spacing: 1px;
+}
+
+.history-card-name {
+  margin: 0.2rem 0 0;
+  color: #ddd;
+}
+
+.history-card-team {
+  color: #a7a7b0;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 0.78rem;
+  text-align: right;
+  max-width: 14ch;
+}
+
+.history-card-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem 1.1rem;
+  margin-top: 1.2rem;
+}
+
+.history-card-secondary {
+  padding-top: 1rem;
+  margin-top: 1rem;
+  border-top: 1px dashed #333;
+}
+
+.history-card-summary {
+  margin: 1rem 0 0;
+  color: #d0d0d8;
+  line-height: 1.55;
+}
+
 .fade-in {
   animation: fadeIn 0.4s ease forwards;
 }
@@ -725,6 +870,19 @@ body {
 
   .news-refresh-btn {
     width: 100%;
+  }
+
+  .history-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .history-controls {
+    justify-content: flex-start;
+  }
+
+  .history-grid {
+    grid-template-columns: 1fr;
   }
 
   .f1-controls-grid {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getEvents, getNewsSummary, getNextEvent, getSeasons, predictRace, uploadModels, ingestData } from "./api";
+import { getEvents, getHistorySummary, getNewsSummary, getNextEvent, getSeasons, predictRace, uploadModels, ingestData } from "./api";
 
 const TEAM_IDS = {
   "Red Bull": "red-bull",
@@ -36,6 +36,14 @@ function formatNewsDate(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function formatHistoryNumber(value, digits = 1) {
+  if (value === null || value === undefined) return "n/a";
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "n/a";
+  if (Number.isInteger(numeric)) return `${numeric}`;
+  return numeric.toFixed(digits);
 }
 
 function AnimatedBar({ value, kind = "chance", delay = 0 }) {
@@ -200,6 +208,111 @@ function TeamCard({ team, index, isActualResult }) {
   );
 }
 
+function HistoryDriverCard({ driver, index }) {
+  return (
+    <article
+      className={`history-card f1-borders ${getTeamClass(driver.team)}`}
+      style={{ animationDelay: `${index * 45}ms` }}
+    >
+      <div className="history-card-top">
+        <div>
+          <span className="history-card-kicker f1-font">DRIVER</span>
+          <h3 className="f1-font history-card-title">{driver.driver_code}</h3>
+          <p className="history-card-name">{driver.driver_name}</p>
+        </div>
+        <div className="history-card-team">{driver.team}</div>
+      </div>
+
+      <div className="history-card-stats">
+        <div className="mini-stat">
+          <span>Record</span>
+          <strong>{driver.wins}-{driver.losses}</strong>
+        </div>
+        <div className="mini-stat highlight">
+          <span>Points</span>
+          <strong>{formatHistoryNumber(driver.points, 1)}</strong>
+        </div>
+        <div className="mini-stat">
+          <span>Podiums</span>
+          <strong>{driver.podiums}</strong>
+        </div>
+        <div className="mini-stat">
+          <span>DNFs</span>
+          <strong>{driver.dnfs}</strong>
+        </div>
+      </div>
+
+      <div className="history-card-stats history-card-secondary">
+        <div className="mini-stat">
+          <span>Avg Finish</span>
+          <strong>{formatHistoryNumber(driver.avg_finish, 2)}</strong>
+        </div>
+        <div className="mini-stat">
+          <span>Best Finish</span>
+          <strong>{formatHistoryNumber(driver.best_finish, 0)}</strong>
+        </div>
+        <div className="mini-stat highlight">
+          <span>Team-mate</span>
+          <strong>{driver.teammate_wins}-{driver.teammate_losses}</strong>
+        </div>
+      </div>
+
+      <p className="history-card-summary">{driver.summary}</p>
+      <div className="card-accent" />
+    </article>
+  );
+}
+
+function HistoryTeamCard({ team, index }) {
+  return (
+    <article
+      className={`history-card f1-borders ${getTeamClass(team.team)}`}
+      style={{ animationDelay: `${index * 45}ms` }}
+    >
+      <div className="history-card-top">
+        <div>
+          <span className="history-card-kicker f1-font">TEAM</span>
+          <h3 className="f1-font history-card-title">{team.team}</h3>
+        </div>
+        <div className="history-card-team">{team.drivers.length ? team.drivers.join(" • ") : "No roster"}</div>
+      </div>
+
+      <div className="history-card-stats">
+        <div className="mini-stat">
+          <span>Record</span>
+          <strong>{team.wins}-{team.losses}</strong>
+        </div>
+        <div className="mini-stat highlight">
+          <span>Points</span>
+          <strong>{formatHistoryNumber(team.points, 1)}</strong>
+        </div>
+        <div className="mini-stat">
+          <span>Podiums</span>
+          <strong>{team.podiums}</strong>
+        </div>
+        <div className="mini-stat">
+          <span>DNFs</span>
+          <strong>{team.dnfs}</strong>
+        </div>
+      </div>
+
+      <div className="history-card-stats history-card-secondary">
+        <div className="mini-stat">
+          <span>Avg Finish</span>
+          <strong>{formatHistoryNumber(team.avg_finish, 2)}</strong>
+        </div>
+        <div className="mini-stat">
+          <span>Best Finish</span>
+          <strong>{formatHistoryNumber(team.best_finish, 0)}</strong>
+        </div>
+      </div>
+
+      <p className="history-card-summary">{team.summary}</p>
+      <div className="card-accent" />
+    </article>
+  );
+}
+
 
 export default function App() {
   const [seasons, setSeasons] = useState([]);
@@ -218,6 +331,9 @@ export default function App() {
   const [isLoadingNews, setIsLoadingNews] = useState(false);
   const [newsDigest, setNewsDigest] = useState(null);
   const [newsError, setNewsError] = useState("");
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [historyDigest, setHistoryDigest] = useState(null);
+  const [historyError, setHistoryError] = useState("");
   
   const [prediction, setPrediction] = useState(null);
   const [selectedDriver, setSelectedDriver] = useState(null);
@@ -329,6 +445,37 @@ export default function App() {
     };
   }, [newsArticleCount]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadHistory() {
+      if (!selectedSeason) return;
+
+      setIsLoadingHistory(true);
+      setHistoryError("");
+
+      try {
+        const digest = await getHistorySummary(Number(selectedSeason));
+        if (!cancelled) {
+          setHistoryDigest(digest);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setHistoryError(err.message || "Failed to load Formula 1 history.");
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingHistory(false);
+        }
+      }
+    }
+
+    loadHistory();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSeason]);
+
   async function handlePredict() {
     if (!selectedSeason || !selectedRound) return;
     setIsPredicting(true);
@@ -415,6 +562,18 @@ export default function App() {
       minute: "2-digit",
     });
   }, [newsDigest]);
+
+  const historyUpdatedAt = useMemo(() => {
+    if (!historyDigest?.generated_at) return "";
+    const date = new Date(historyDigest.generated_at);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }, [historyDigest]);
 
   return (
     <div className="f1-shell">
@@ -538,6 +697,82 @@ export default function App() {
                     <div className="news-card-link">Open article</div>
                   </a>
                 ))}
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="f1-history-section f1-borders">
+          <div className="history-header">
+            <div>
+              <span className="section-kicker f1-font">SQL HISTORY</span>
+              <h2 className="f1-font">DRIVER & TEAM HISTORY</h2>
+              <p className="news-subtitle">
+                Local race-result history queried through a SQL cache and grouped into driver and constructor records.
+              </p>
+            </div>
+            <div className="history-controls">
+              <div className="history-pill">
+                <span>Requested</span>
+                <strong>{selectedSeason || "-"}</strong>
+              </div>
+              <div className="history-pill">
+                <span>Resolved</span>
+                <strong>{historyDigest?.resolved_season ?? "-"}</strong>
+              </div>
+              <div className="history-pill">
+                <span>Drivers</span>
+                <strong>{historyDigest?.drivers?.length ?? 0}</strong>
+              </div>
+              <div className="history-pill">
+                <span>Teams</span>
+                <strong>{historyDigest?.teams?.length ?? 0}</strong>
+              </div>
+            </div>
+          </div>
+
+          {historyError && <div className="msg error">{historyError}</div>}
+
+          {isLoadingHistory && !historyDigest && <div className="history-loading">Loading local driver and team history...</div>}
+
+          {historyDigest && (
+            <div className="history-content">
+              <div className="history-summary-panel">
+                <div className="news-summary-topline">
+                  <span className="news-summary-label f1-font">OVERVIEW</span>
+                  {historyUpdatedAt && <span className="news-summary-updated">Updated {historyUpdatedAt}</span>}
+                </div>
+                <p>{historyDigest.overall_summary}</p>
+                <p className="history-note">{historyDigest.availability_note}</p>
+                <div className="news-topic-list">
+                  {Array.isArray(historyDigest.highlights) && historyDigest.highlights.map((item) => (
+                    <span key={item} className="news-topic-chip">{item}</span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="history-grid-block">
+                <div className="history-section-heading">
+                  <span className="section-kicker f1-font">DRIVERS</span>
+                  <h3 className="f1-font">CURRENT GRID HISTORY</h3>
+                </div>
+                <div className="f1-cards-grid history-grid">
+                  {historyDigest.drivers.map((driver, index) => (
+                    <HistoryDriverCard key={driver.driver_code} driver={driver} index={index} />
+                  ))}
+                </div>
+              </div>
+
+              <div className="history-grid-block">
+                <div className="history-section-heading">
+                  <span className="section-kicker f1-font">CONSTRUCTORS</span>
+                  <h3 className="f1-font">TEAM HISTORY</h3>
+                </div>
+                <div className="f1-cards-grid history-grid">
+                  {historyDigest.teams.map((team, index) => (
+                    <HistoryTeamCard key={team.team} team={team} index={index} />
+                  ))}
+                </div>
               </div>
             </div>
           )}

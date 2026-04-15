@@ -43,6 +43,11 @@ export async function getNewsSummary(count = 6) {
   return fetchJson(`/news/summary?count=${count}`);
 }
 
+export async function getHistorySummary(season = null) {
+  const query = season === null || season === undefined ? "" : `?season=${season}`;
+  return fetchJson(`/history/summary${query}`);
+}
+
 export async function predictRace(season, round) {
   return fetchJson("/predict_race", {
     method: "POST",

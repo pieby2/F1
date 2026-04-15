@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Query
 from pydantic import BaseModel, Field
 
+from src.history_service import Formula1HistoryService
 from src.inference import InferenceService
 from src.news_service import Formula1NewsService
 
@@ -61,6 +62,49 @@ class NewsDigestResponse(BaseModel):
     articles: list[NewsArticleSummary]
 
 
+class HistoryDriverSummary(BaseModel):
+    driver_code: str
+    driver_name: str
+    team: str
+    races: int
+    wins: int
+    losses: int
+    podiums: int
+    points: float
+    dnfs: int
+    avg_finish: float | None
+    best_finish: int | None
+    teammate_wins: int
+    teammate_losses: int
+    summary: str
+
+
+class HistoryTeamSummary(BaseModel):
+    team: str
+    races: int
+    wins: int
+    losses: int
+    podiums: int
+    points: float
+    dnfs: int
+    avg_finish: float | None
+    best_finish: int | None
+    drivers: list[str]
+    summary: str
+
+
+class HistoryDigestResponse(BaseModel):
+    requested_season: int
+    resolved_season: int
+    generated_at: str
+    availability_note: str
+    available_seasons: list[int]
+    overall_summary: str
+    highlights: list[str]
+    drivers: list[HistoryDriverSummary]
+    teams: list[HistoryTeamSummary]
+
+
 @lru_cache(maxsize=1)
 def get_service() -> InferenceService:
     data_root = os.getenv("DATA_ROOT", "data/fastf1_csv")
@@ -81,6 +125,13 @@ def get_news_service() -> Formula1NewsService:
         timeout_seconds=timeout,
         cache_ttl_seconds=cache_ttl,
     )
+
+
+@lru_cache(maxsize=1)
+def get_history_service() -> Formula1HistoryService:
+    data_root = os.getenv("DATA_ROOT", "data/fastf1_csv")
+    cache_dir = os.getenv("HISTORY_CACHE_DIR", "data/fastf1_csv/_api_cache")
+    return Formula1HistoryService(data_root=data_root, cache_dir=cache_dir)
 
 
 app = FastAPI(
@@ -185,6 +236,18 @@ def news_summary(count: int = Query(default=6, ge=5, le=7)) -> NewsDigestRespons
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     return NewsDigestResponse(**payload)
+
+
+@app.get("/history/summary", response_model=HistoryDigestResponse)
+def history_summary(season: int | None = Query(default=None, ge=1950)) -> HistoryDigestResponse:
+    service = get_history_service()
+
+    try:
+        payload = service.build_history_summary(season=season)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    return HistoryDigestResponse(**payload)
 
 
 @app.post("/predict_race", response_model=RacePredictionResponse)

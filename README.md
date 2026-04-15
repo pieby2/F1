@@ -12,6 +12,7 @@ This project uses **FastF1** to ingest telemetry/session data, scikit-learn (Ran
 *   **Offline Walk-Forward Training:** Memory-efficient architecture. Train models locally on your PC (where RAM is free), zip the models, and upload them to the web server.
 *   **Ensemble ML Prediction:** Uses blended probabilities from Grid Position, Points Finish, DNF, and Multi-Class Outcome estimators to produce a unified prediction score.
 *   **Formula 1 News Digest:** Summarizes 5 to 7 recent F1-related headlines inside the dashboard with a quick topline and article cards.
+*   **Driver & Team History Panel:** Queries a local SQL cache of race results to show driver records, teammate battles, and constructor history.
 *   **Data Ingestion API:** Hot-pull the latest race session data directly from the Ergrast API and FastF1.
 *   **Modern Interactive Dashboard:** A responsive, dark-themed React application with probability bars, podium projections, and driver insights.
 *   **AWS EKS Production-Ready:** Complete Docker multi-stage builds and Kubernetes infrastructure code included for high-availability deployment.
@@ -30,6 +31,7 @@ This project uses **FastF1** to ingest telemetry/session data, scikit-learn (Ran
 │   └── nginx.conf        # Nginx SPA config
 ├── k8s/                  # Kubernetes configuration manifests
 ├── src/                  # Core Python modules
+│   ├── history_service.py # SQL-backed driver/team history summaries
 │   └── inference/        # WalkForwardPredictor and active Inference Service
 ├── data/                 # Raw data (git-ignored)
 ├── models/               # .joblib ML models (git-ignored)
@@ -74,6 +76,7 @@ npm run dev
 ```
 
 The dashboard also shows a Formula 1 news digest that refreshes on demand and summarizes 5 to 7 recent headlines.
+It also includes a driver/team history section that reads from a local SQL cache and falls back to the latest ingested season when the selected year is ahead of the cached race results.
 
 ---
 
